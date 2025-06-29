@@ -1,21 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, Edit, Trash2, UserPlus } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../components/ui/form';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import DataTable from '../../components/admin/DataTable';
+import EntityForm from '../../components/admin/EntityForm';
 import apiService from '../../services/api';
 
 const userSchema = z.object({
-  name: z.string().min(1, 'Имя обязательно'),
+  name: z.string().min(2, 'Имя должно содержать минимум 2 символа'),
   email: z.string().email('Введите корректный email'),
   phone: z.string().min(10, 'Введите корректный номер телефона'),
   role: z.enum(['user', 'admin']),
@@ -24,40 +15,41 @@ const userSchema = z.object({
 const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState('view');
   const [selectedUser, setSelectedUser] = useState(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-
-  const form = useForm({
-    resolver: zodResolver(userSchema),
-    defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      role: 'user',
-    },
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0
   });
+  const [filters, setFilters] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  const loadUsers = async () => {
+  const loadUsers = async (page = 1, search = '', filterParams = {}) => {
+    setLoading(true);
     try {
+      const params = {
+        page,
+        limit: 50,
+        ...filterParams
+      };
+      
+      if (search) params.search = search;
+
       const response = await apiService.request('/admin/users', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
-      setUsers(response.users || []);
-    } catch (error) {
-      console.error('Ошибка загрузки пользователей:', error);
-      toast.error('Ошибка загрузки пользователей');
+      
       // Заглушка для демонстрации
-      setUsers([
+      const mockUsers = [
         {
           _id: '1',
           name: 'Иван Петров',
@@ -85,16 +77,140 @@ const Users = () => {
           createdAt: new Date(Date.now() - 172800000).toISOString(),
           address: { street: 'ул. Админская, 1', city: 'Москва', zipCode: '000000' }
         }
-      ]);
+      ];
+
+      setUsers(mockUsers);
+      setPagination({
+        currentPage: 1,
+        totalPages: 1,
+        total: mockUsers.length
+      });
+    } catch (error) {
+      console.error('Ошибка загрузки пользователей:', error);
+      toast.error('Ошибка загрузки пользователей');
     } finally {
       setLoading(false);
     }
   };
 
-  const onSubmit = async (data) => {
+  // Конфигурация колонок таблицы
+  const columns = [
+    {
+      header: 'Имя',
+      accessor: 'name'
+    },
+    {
+      header: 'Email',
+      accessor: 'email'
+    },
+    {
+      header: 'Телефон',
+      accessor: 'phone'
+    },
+    {
+      header: 'Роль',
+      accessor: 'role',
+      type: 'badge',
+      badgeVariant: (value) => value === 'admin' ? 'destructive' : 'default',
+      badgeLabel: (value) => value === 'admin' ? 'Администратор' : 'Пользователь'
+    },
+    {
+      header: 'Дата регистрации',
+      accessor: 'createdAt',
+      type: 'date'
+    }
+  ];
+
+  // Конфигурация полей формы
+  const formFields = [
+    {
+      name: 'name',
+      label: 'Имя',
+      type: 'text',
+      placeholder: 'Имя пользователя',
+      fullWidth: true
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      placeholder: 'email@example.com'
+    },
+    {
+      name: 'phone',
+      label: 'Телефон',
+      type: 'tel',
+      placeholder: '+7 999 123-45-67'
+    },
+    {
+      name: 'role',
+      label: 'Роль',
+      type: 'select',
+      placeholder: 'Выберите роль',
+      options: [
+        { value: 'user', label: 'Пользователь' },
+        { value: 'admin', label: 'Администратор' }
+      ]
+    },
+    {
+      name: 'address',
+      label: 'Адрес',
+      type: 'custom',
+      fullWidth: true,
+      render: (field, isReadonly, value) => (
+        <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
+          {selectedUser?.address ? 
+            `${selectedUser.address.street}, ${selectedUser.address.city}, ${selectedUser.address.zipCode}` :
+            'Не указан'
+          }
+        </div>
+      )
+    },
+    {
+      name: 'createdAt',
+      label: 'Дата регистрации',
+      type: 'datetime'
+    }
+  ];
+
+  // Обработчики событий
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    loadUsers(1, query, filters);
+  };
+
+  const handleFilter = (newFilters) => {
+    setFilters(newFilters);
+    loadUsers(1, searchQuery, newFilters);
+  };
+
+  const handlePageChange = (page) => {
+    loadUsers(page, searchQuery, filters);
+  };
+
+  const handleView = (user) => {
+    setSelectedUser(user);
+    setFormMode('view');
+    setIsFormOpen(true);
+  };
+
+  const handleEdit = (user) => {
+    setSelectedUser(user);
+    setFormMode('edit');
+    setIsFormOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedUser(null);
+    setFormMode('create');
+    setIsFormOpen(true);
+  };
+
+  const handleFormSubmit = async (data, mode) => {
+    setFormLoading(true);
     try {
-      if (editingUser) {
-        await apiService.request(`/admin/users/${editingUser._id}`, {
+      if (mode === 'edit') {
+        await apiService.request(`/admin/users/${selectedUser._id}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -115,339 +231,78 @@ const Users = () => {
         toast.success('Пользователь создан');
       }
 
-      setIsEditDialogOpen(false);
-      setEditingUser(null);
-      form.reset();
-      loadUsers();
+      setIsFormOpen(false);
+      loadUsers(pagination.currentPage, searchQuery, filters);
     } catch (error) {
       console.error('Ошибка сохранения пользователя:', error);
       toast.error('Ошибка сохранения пользователя');
+    } finally {
+      setFormLoading(false);
     }
   };
 
-  const handleEdit = (user) => {
-    setEditingUser(user);
-    form.reset({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  const handleDelete = async (userId) => {
-    if (!confirm('Вы уверены, что хотите удалить этого пользователя?')) return;
-
+  const handleDelete = async (user) => {
     try {
-      await apiService.request(`/admin/users/${userId}`, {
+      await apiService.request(`/admin/users/${user._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
       toast.success('Пользователь удален');
-      loadUsers();
+      setIsFormOpen(false);
+      loadUsers(pagination.currentPage, searchQuery, filters);
     } catch (error) {
       console.error('Ошибка удаления пользователя:', error);
       toast.error('Ошибка удаления пользователя');
     }
   };
 
-  const getRoleBadge = (role) => {
-    return (
-      <Badge variant={role === 'admin' ? 'destructive' : 'default'}>
-        {role === 'admin' ? 'Администратор' : 'Пользователь'}
-      </Badge>
-    );
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('ru-RU');
-  };
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.phone.includes(searchQuery);
-    const matchesRole = !roleFilter || user.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
-
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Управление пользователями</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Просматривайте и управляйте пользователями системы
-          </p>
-        </div>
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => {
-              setEditingUser(null);
-              form.reset();
-            }}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Добавить пользователя
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingUser ? 'Редактировать пользователя' : 'Добавить пользователя'}
-              </DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Имя</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Имя пользователя" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+    <>
+      <DataTable
+        title="Управление пользователями"
+        data={users}
+        columns={columns}
+        loading={loading}
+        searchFields={['name', 'email', 'phone']}
+        filterFields={[
+          {
+            field: 'role',
+            placeholder: 'Все роли',
+            options: [
+              { value: 'user', label: 'Пользователи' },
+              { value: 'admin', label: 'Администраторы' }
+            ]
+          }
+        ]}
+        sortFields={['name', 'email', 'createdAt']}
+        pagination={pagination}
+        onSearch={handleSearch}
+        onFilter={handleFilter}
+        onPageChange={handlePageChange}
+        onView={handleView}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onCreate={handleCreate}
+        emptyMessage="Пользователи не найдены"
+        emptyDescription="Попробуйте изменить параметры поиска"
+      />
 
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="email@example.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Телефон</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+7 999 123-45-67" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="role"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Роль</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Выберите роль" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="user">Пользователь</SelectItem>
-                          <SelectItem value="admin">Администратор</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                    Отмена
-                  </Button>
-                  <Button type="submit">
-                    {editingUser ? 'Обновить' : 'Создать'}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Поиск по имени, email или телефону..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="lg:w-64">
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Все роли" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Все роли</SelectItem>
-                  <SelectItem value="user">Пользователи</SelectItem>
-                  <SelectItem value="admin">Администраторы</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Users Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Пользователи ({filteredUsers.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-4">
-              {[...Array(5)].map((_, index) => (
-                <div key={index} className="animate-pulse flex space-x-4 p-4">
-                  <div className="h-4 bg-gray-300 rounded w-1/4"></div>
-                  <div className="h-4 bg-gray-300 rounded w-1/4"></div>
-                  <div className="h-4 bg-gray-300 rounded w-1/4"></div>
-                  <div className="h-4 bg-gray-300 rounded w-1/4"></div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Имя</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Телефон</TableHead>
-                  <TableHead>Роль</TableHead>
-                  <TableHead>Дата регистрации</TableHead>
-                  <TableHead>Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user._id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
-                    <TableCell>{getRoleBadge(user.role)}</TableCell>
-                    <TableCell>{formatDate(user.createdAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setIsDialogOpen(true);
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEdit(user)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(user._id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-
-          {filteredUsers.length === 0 && !loading && (
-            <div className="text-center py-12">
-              <div className="text-gray-400 mb-4">
-                <Search className="w-16 h-16 mx-auto" />
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Пользователи не найдены</h3>
-              <p className="text-gray-600">
-                Попробуйте изменить параметры поиска
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* User Details Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Информация о пользователе</DialogTitle>
-          </DialogHeader>
-          {selectedUser && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-600">Имя</label>
-                <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  {selectedUser.name}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Email</label>
-                <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  {selectedUser.email}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Телефон</label>
-                <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  {selectedUser.phone}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-600">Роль</label>
-                <div className="mt-1">
-                  {getRoleBadge(selectedUser.role)}
-                </div>
-              </div>
-              {selectedUser.address && (
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Адрес</label>
-                  <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                    {selectedUser.address.street}, {selectedUser.address.city}, {selectedUser.address.zipCode}
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="text-sm font-medium text-gray-600">Дата регистрации</label>
-                <div className="mt-1 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                  {formatDate(selectedUser.createdAt)}
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+      <EntityForm
+        title="пользователя"
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        mode={formMode}
+        entity={selectedUser}
+        schema={userSchema}
+        fields={formFields}
+        onSubmit={handleFormSubmit}
+        onDelete={handleDelete}
+        loading={formLoading}
+        deleteConfirmMessage="Вы уверены, что хотите удалить этого пользователя? Это действие нельзя отменить."
+      />
+    </>
   );
 };
 

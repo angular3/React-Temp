@@ -1,18 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, Filter } from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../components/ui/form';
-import { Textarea } from '../../components/ui/textarea';
-import { Switch } from '../../components/ui/switch';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import DataTable from '../../components/admin/DataTable';
+import EntityForm from '../../components/admin/EntityForm';
 import apiService from '../../services/api';
 
 const productSchema = z.object({
@@ -31,35 +21,41 @@ const Products = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-
-  const form = useForm({
-    resolver: zodResolver(productSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      price: 0,
-      category: '',
-      weight: 0,
-      calories: 0,
-      ingredients: '',
-      isAvailable: true,
-      isPopular: false,
-    },
+  const [formLoading, setFormLoading] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState('view');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    total: 0
   });
+  const [filters, setFilters] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadProducts();
     loadCategories();
   }, []);
 
-  const loadProducts = async () => {
+  const loadProducts = async (page = 1, search = '', filterParams = {}) => {
+    setLoading(true);
     try {
-      const response = await apiService.getProducts({ limit: 100 });
+      const params = {
+        page,
+        limit: 12,
+        ...filterParams
+      };
+      
+      if (search) params.search = search;
+
+      const response = await apiService.getProducts(params);
       setProducts(response.products || []);
+      setPagination({
+        currentPage: response.currentPage || page,
+        totalPages: response.totalPages || 1,
+        total: response.total || 0
+      });
     } catch (error) {
       console.error('Ошибка загрузки продуктов:', error);
       toast.error('Ошибка загрузки продуктов');
@@ -77,12 +73,160 @@ const Products = () => {
     }
   };
 
-  const onSubmit = async (data) => {
+  // Конфигурация колонок таблицы
+  const columns = [
+    {
+      header: 'Изображение',
+      accessor: 'image',
+      render: (value) => (
+        <img
+          src={value || 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg'}
+          alt="Product"
+          className="w-12 h-12 object-cover rounded"
+        />
+      )
+    },
+    {
+      header: 'Название',
+      accessor: 'name'
+    },
+    {
+      header: 'Категория',
+      accessor: 'category',
+      render: (value) => value?.name || 'Не указана'
+    },
+    {
+      header: 'Цена',
+      accessor: 'price',
+      type: 'currency'
+    },
+    {
+      header: 'Вес',
+      accessor: 'weight',
+      render: (value) => `${value}г`
+    },
+    {
+      header: 'Доступность',
+      accessor: 'isAvailable',
+      type: 'badge',
+      badgeVariant: (value) => value ? 'default' : 'secondary',
+      badgeLabel: (value) => value ? 'Доступен' : 'Недоступен'
+    },
+    {
+      header: 'Популярное',
+      accessor: 'isPopular',
+      type: 'badge',
+      badgeVariant: (value) => value ? 'default' : 'outline',
+      badgeLabel: (value) => value ? 'Да' : 'Нет'
+    }
+  ];
+
+  // Конфигурация полей формы
+  const formFields = [
+    {
+      name: 'name',
+      label: 'Название',
+      type: 'text',
+      placeholder: 'Название блюда',
+      fullWidth: true
+    },
+    {
+      name: 'description',
+      label: 'Описание',
+      type: 'textarea',
+      placeholder: 'Описание блюда',
+      fullWidth: true,
+      rows: 3
+    },
+    {
+      name: 'category',
+      label: 'Категория',
+      type: 'select',
+      placeholder: 'Выберите категорию',
+      options: categories.map(cat => ({ value: cat._id, label: cat.name }))
+    },
+    {
+      name: 'price',
+      label: 'Цена (₽)',
+      type: 'number',
+      placeholder: '0'
+    },
+    {
+      name: 'weight',
+      label: 'Вес (г)',
+      type: 'number',
+      placeholder: '0'
+    },
+    {
+      name: 'calories',
+      label: 'Калории',
+      type: 'number',
+      placeholder: '0'
+    },
+    {
+      name: 'ingredients',
+      label: 'Ингредиенты',
+      type: 'array',
+      placeholder: 'Помидоры, сыр, базилик...',
+      fullWidth: true,
+      description: 'Введите ингредиенты через запятую'
+    },
+    {
+      name: 'isAvailable',
+      label: 'Доступно для заказа',
+      type: 'boolean',
+      defaultValue: true
+    },
+    {
+      name: 'isPopular',
+      label: 'Популярное блюдо',
+      type: 'boolean',
+      defaultValue: false
+    }
+  ];
+
+  // Обработчики событий
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    loadProducts(1, query, filters);
+  };
+
+  const handleFilter = (newFilters) => {
+    setFilters(newFilters);
+    loadProducts(1, searchQuery, newFilters);
+  };
+
+  const handlePageChange = (page) => {
+    loadProducts(page, searchQuery, filters);
+  };
+
+  const handleView = (product) => {
+    setSelectedProduct(product);
+    setFormMode('view');
+    setIsFormOpen(true);
+  };
+
+  const handleEdit = (product) => {
+    setSelectedProduct(product);
+    setFormMode('edit');
+    setIsFormOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedProduct(null);
+    setFormMode('create');
+    setIsFormOpen(true);
+  };
+
+  const handleFormSubmit = async (data, mode) => {
+    setFormLoading(true);
     try {
       const formData = new FormData();
       
       // Преобразуем ingredients из строки в массив
-      const ingredients = data.ingredients ? data.ingredients.split(',').map(i => i.trim()) : [];
+      const ingredients = data.ingredients ? 
+        (Array.isArray(data.ingredients) ? data.ingredients : data.ingredients.split(',').map(i => i.trim())) : 
+        [];
       
       Object.keys(data).forEach(key => {
         if (key === 'ingredients') {
@@ -92,8 +236,8 @@ const Products = () => {
         }
       });
 
-      if (editingProduct) {
-        await apiService.request(`/products/${editingProduct._id}`, {
+      if (mode === 'edit') {
+        await apiService.request(`/products/${selectedProduct._id}`, {
           method: 'PUT',
           body: formData,
           headers: {
@@ -112,382 +256,83 @@ const Products = () => {
         toast.success('Продукт создан');
       }
 
-      setIsDialogOpen(false);
-      setEditingProduct(null);
-      form.reset();
-      loadProducts();
+      setIsFormOpen(false);
+      loadProducts(pagination.currentPage, searchQuery, filters);
     } catch (error) {
       console.error('Ошибка сохранения продукта:', error);
       toast.error('Ошибка сохранения продукта');
+    } finally {
+      setFormLoading(false);
     }
   };
 
-  const handleEdit = (product) => {
-    setEditingProduct(product);
-    form.reset({
-      name: product.name,
-      description: product.description,
-      price: product.price,
-      category: product.category._id,
-      weight: product.weight,
-      calories: product.calories || 0,
-      ingredients: product.ingredients ? product.ingredients.join(', ') : '',
-      isAvailable: product.isAvailable,
-      isPopular: product.isPopular,
-    });
-    setIsDialogOpen(true);
-  };
-
-  const handleDelete = async (productId) => {
-    if (!confirm('Вы уверены, что хотите удалить этот продукт?')) return;
-
+  const handleDelete = async (product) => {
     try {
-      await apiService.request(`/products/${productId}`, {
+      await apiService.request(`/products/${product._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
       toast.success('Продукт удален');
-      loadProducts();
+      setIsFormOpen(false);
+      loadProducts(pagination.currentPage, searchQuery, filters);
     } catch (error) {
       console.error('Ошибка удаления продукта:', error);
       toast.error('Ошибка удаления продукта');
     }
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || product.category._id === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
-
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Управление продуктами</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Добавляйте, редактируйте и удаляйте блюда в меню
-          </p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => {
-              setEditingProduct(null);
-              form.reset();
-            }}>
-              <Plus className="w-4 h-4 mr-2" />
-              Добавить продукт
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingProduct ? 'Редактировать продукт' : 'Добавить продукт'}
-              </DialogTitle>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Название</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Название блюда" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+    <>
+      <DataTable
+        title="Управление продуктами"
+        data={products}
+        columns={columns}
+        loading={loading}
+        searchFields={['name', 'description']}
+        filterFields={[
+          {
+            field: 'category',
+            placeholder: 'Все категории',
+            options: categories.map(cat => ({ value: cat._id, label: cat.name }))
+          },
+          {
+            field: 'isAvailable',
+            placeholder: 'Доступность',
+            options: [
+              { value: 'true', label: 'Доступные' },
+              { value: 'false', label: 'Недоступные' }
+            ]
+          }
+        ]}
+        sortFields={['name', 'price', 'weight', 'createdAt']}
+        pagination={pagination}
+        onSearch={handleSearch}
+        onFilter={handleFilter}
+        onPageChange={handlePageChange}
+        onView={handleView}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onCreate={handleCreate}
+        emptyMessage="Продукты не найдены"
+        emptyDescription="Попробуйте изменить параметры поиска или добавьте новый продукт"
+      />
 
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Категория</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Выберите категорию" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories.map((category) => (
-                              <SelectItem key={category._id} value={category._id}>
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Описание</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Описание блюда" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Цена (₽)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="0" 
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="weight"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Вес (г)</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="0" 
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="calories"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Калории</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="0" 
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="ingredients"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ингредиенты (через запятую)</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Помидоры, сыр, базилик..." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex space-x-6">
-                  <FormField
-                    control={form.control}
-                    name="isAvailable"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center space-x-2">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormLabel>Доступно для заказа</FormLabel>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="isPopular"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center space-x-2">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <FormLabel>Популярное блюдо</FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Отмена
-                  </Button>
-                  <Button type="submit">
-                    {editingProduct ? 'Обновить' : 'Создать'}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Поиск продуктов..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="lg:w-64">
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Все категории" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Все категории</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category._id} value={category._id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Products Grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, index) => (
-            <Card key={index} className="animate-pulse">
-              <div className="h-48 bg-gray-300 rounded-t-lg"></div>
-              <CardContent className="p-4">
-                <div className="h-4 bg-gray-300 rounded mb-2"></div>
-                <div className="h-4 bg-gray-300 rounded w-3/4"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product) => (
-            <Card key={product._id} className="hover:shadow-lg transition-shadow">
-              <div className="relative">
-                <img
-                  src={product.image || 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg'}
-                  alt={product.name}
-                  className="w-full h-48 object-cover rounded-t-lg"
-                />
-                <div className="absolute top-2 left-2 flex gap-2">
-                  {product.isPopular && (
-                    <Badge className="bg-orange-500">Популярное</Badge>
-                  )}
-                  {!product.isAvailable && (
-                    <Badge variant="destructive">Недоступно</Badge>
-                  )}
-                </div>
-              </div>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-lg">{product.name}</h3>
-                  <span className="text-lg font-bold text-orange-600">
-                    {formatPrice(product.price)}
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm mb-2 line-clamp-2">
-                  {product.description}
-                </p>
-                <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
-                  <span>{product.category.name}</span>
-                  <span>{product.weight}г • {product.calories} ккал</span>
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(product)}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(product._id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {filteredProducts.length === 0 && !loading && (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-            <h3 className="text-xl font-semibold mb-2">Продукты не найдены</h3>
-            <p className="text-gray-600">
-              Попробуйте изменить параметры поиска или добавьте новый продукт
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      <EntityForm
+        title="продукт"
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        mode={formMode}
+        entity={selectedProduct}
+        schema={productSchema}
+        fields={formFields}
+        onSubmit={handleFormSubmit}
+        onDelete={handleDelete}
+        loading={formLoading}
+        deleteConfirmMessage="Вы уверены, что хотите удалить этот продукт? Это действие нельзя отменить."
+      />
+    </>
   );
 };
 
