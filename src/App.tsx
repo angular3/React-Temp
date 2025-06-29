@@ -10,6 +10,9 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Index from "./pages/Index";
 import Products from "./pages/Products";
+import About from "./pages/About";
+import Delivery from "./pages/Delivery";
+import Promotions from "./pages/Promotions";
 import Cart from "./pages/Cart";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -54,6 +57,9 @@ const App = () => (
                       <Routes>
                         <Route path="/" element={<Index />} />
                         <Route path="/products" element={<Products />} />
+                        <Route path="/about" element={<About />} />
+                        <Route path="/delivery" element={<Delivery />} />
+                        <Route path="/promotions" element={<Promotions />} />
                         <Route path="/cart" element={<Cart />} />
                         <Route path="/login" element={<Login />} />
                         <Route path="/register" element={<Register />} />
