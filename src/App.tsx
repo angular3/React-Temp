@@ -14,6 +14,13 @@ import About from "./pages/About";
 import Delivery from "./pages/Delivery";
 import Promotions from "./pages/Promotions";
 import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import Orders from "./pages/Orders";
+import Blog from "./pages/Blog";
+import Contact from "./pages/Contact";
+import Profile from "./pages/Profile";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
@@ -23,7 +30,7 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
 import AdminProducts from "./pages/admin/Products";
 import Categories from "./pages/admin/Categories";
-import Orders from "./pages/admin/Orders";
+import AdminOrders from "./pages/admin/Orders";
 import Users from "./pages/admin/Users";
 import Settings from "./pages/admin/Settings";
 
@@ -44,7 +51,7 @@ const App = () => (
                   <Route index element={<Dashboard />} />
                   <Route path="products" element={<AdminProducts />} />
                   <Route path="categories" element={<Categories />} />
-                  <Route path="orders" element={<Orders />} />
+                  <Route path="orders" element={<AdminOrders />} />
                   <Route path="users" element={<Users />} />
                   <Route path="settings" element={<Settings />} />
                 </Route>
@@ -61,6 +68,13 @@ const App = () => (
                         <Route path="/delivery" element={<Delivery />} />
                         <Route path="/promotions" element={<Promotions />} />
                         <Route path="/cart" element={<Cart />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/orders" element={<Orders />} />
+                        <Route path="/blog" element={<Blog />} />
+                        <Route path="/contact" element={<Contact />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/privacy" element={<Privacy />} />
+                        <Route path="/terms" element={<Terms />} />
                         <Route path="/login" element={<Login />} />
                         <Route path="/register" element={<Register />} />
                         <Route path="*" element={<NotFound />} />
