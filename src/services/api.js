@@ -104,6 +104,36 @@ class ApiService {
   async getOrder(id) {
     return this.request(`/orders/${id}`);
   }
+
+  // Reviews methods
+  async getProductReviews(productId) {
+    return this.request(`/products/${productId}/reviews`);
+  }
+
+  async createReview(productId, reviewData) {
+    return this.request(`/products/${productId}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify(reviewData),
+    });
+  }
+
+  // Favorites methods
+  async getFavorites() {
+    return this.request('/favorites');
+  }
+
+  async addToFavorites(productId) {
+    return this.request('/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ productId }),
+    });
+  }
+
+  async removeFromFavorites(productId) {
+    return this.request(`/favorites/${productId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export default new ApiService();

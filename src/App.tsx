@@ -10,6 +10,7 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Index from "./pages/Index";
 import Products from "./pages/Products";
+import ProductDetail from "./pages/ProductDetail";
 import About from "./pages/About";
 import Delivery from "./pages/Delivery";
 import Promotions from "./pages/Promotions";
@@ -64,6 +65,7 @@ const App = () => (
                       <Routes>
                         <Route path="/" element={<Index />} />
                         <Route path="/products" element={<Products />} />
+                        <Route path="/product/:id" element={<ProductDetail />} />
                         <Route path="/about" element={<About />} />
                         <Route path="/delivery" element={<Delivery />} />
                         <Route path="/promotions" element={<Promotions />} />
